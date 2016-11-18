@@ -72,8 +72,8 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 ;;if path to file is specified in :content -- binary contents of the file are sent (so I need to create some wrapper-func which will read file, mb
 ;;check it for validity and then send as string (mb not the bes idea for large files -- should think about something more fast
 
-(defun load-document (address content-type content)
-  (with-drakma-http-request address :put :content-type :content-type :content content))
+(defmacro load-document (address content-type content)
+  `(with-drakma-http-request ,address :put :content-type ,content-type :content ,content))
 
 ;;(load "mycol2/mdoc.xml" "application/xml" "<test>test</test>")
 ;;is equal to
@@ -109,3 +109,39 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 ;;                         :basic-authorization '("admin" "admin")
 ;;                         :parameters '(("_query" . "xmldb:create-collection('mycol2', 'testcol')")))
                          
+(defmacro delete-from-db (address)
+  `(with-drakma-http-request ,address :delete))
+
+;; "Bad request"
+(defmacro get-permissions (address)
+  `(with-drakma-http-request ,address :get :parameters 
+			    ,(make-request-parameters :query 
+						      (concatenate 'string "xmldb:get-permissions('" address "')"))))
+
+						      
+(defun divide-path (path)
+    (if (position #\/ path)
+	(values (subseq path 0 (1+ (position #\/ path :from-end t))) (subseq path (1+ (position #\/ path :from-end t))))
+	(values "" path)))
+	
+	
+(defmacro move-collection (source direction)
+  `(with-drakma-http-request ,source :get :parameters 
+			    ,(make-request-parameters :query 
+						      (concatenate 'string "xmldb:move('/db/" source "', '/db/" direction "')"))))
+
+(defmacro move-document (source direction)
+  (let ((src (gensym))
+        (document (gensym)))
+	      (multiple-value-bind (src document)
+			    (divide-path source)
+				`(with-drakma-http-request ,source :get :parameters 
+				    ,(make-request-parameters :query 
+					  (concatenate 'string "xmldb:move('/db/" src "', '/db/" direction "', '" document "')"))))))
+						      
+                         
+;; works but return nothing useful
+(drakma:http-request "http://localhost:8080/exist/rest/db"
+                         :method :get
+                         :basic-authorization '("admin" "admin")
+                         :parameters '(("_query" . "xmldb:get-permissions('/db/mycol2/testcol22')")))
