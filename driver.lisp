@@ -129,7 +129,7 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
   `(with-drakma-http-request ,source :get :parameters 
 			    ,(make-request-parameters :query 
 						      (concatenate 'string "xmldb:move('/db/" source "', '/db/" direction "')"))))
-
+						      
 (defmacro move-document (source direction)
   (let ((src (gensym))
         (document (gensym)))
@@ -138,9 +138,37 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 				`(with-drakma-http-request ,source :get :parameters 
 				    ,(make-request-parameters :query 
 					  (concatenate 'string "xmldb:move('/db/" src "', '/db/" direction "', '" document "')"))))))
+					  
+(defmacro copy-collection (source direction)
+  `(with-drakma-http-request ,source :get :parameters 
+			    ,(make-request-parameters :query 
+						      (concatenate 'string "xmldb:copy('/db/" source "', '/db/" direction "')"))))
 						      
-                         
-;; works but return nothing useful
+(defmacro copy-document (source direction)
+  (let ((src (gensym))
+        (document (gensym)))
+	      (multiple-value-bind (src document)
+			    (divide-path source)
+				`(with-drakma-http-request ,source :get :parameters 
+				    ,(make-request-parameters :query 
+					  (concatenate 'string "xmldb:copy('/db/" src "', '/db/" direction "', '" document "')"))))))
+					  
+(defmacro execute-query (query)
+  `(with-drakma-http-request ,source :get :parameters 
+			    ,(make-request-parameters :query query)))
+						      
+
+
+						      
+						      
+						      
+;; want-stream -- makes request return a stream (xml file) which can be proceeded using my own parser or one of the existing
+(read-line (drakma:http-request "http://localhost:8080/exist/rest/db"
+                         :method :get
+                         :basic-authorization '("admin" "admin")
+                         :parameters '(("_query" . "xmldb:collection-available('/db/mycol2')"))
+                         :want-stream t))
+;; ^
 (drakma:http-request "http://localhost:8080/exist/rest/db"
                          :method :get
                          :basic-authorization '("admin" "admin")
