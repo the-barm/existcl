@@ -28,15 +28,8 @@
 (defparameter *connection* nil)
 
 (defun prepare-parameter (param str)
-  (when (equal (subseq str 0 (length param)) param) (string-right-trim " " (subseq str (+ (length param) 1)))))
-
-(defun read-db-config ()
-  (with-open-file (stream "db.config")
-  (let ((address (prepare-parameter "address" (read-line stream)))
-        (port (prepare-parameter "port" (read-line stream)))
-        (username (prepare-parameter "username" (read-line stream)))
-        (password (prepare-parameter "password" (read-line stream))))
-     (setf *connection* (make-instance 'connection :address address :port port :username username :password password)))))
+  (when (equal (subseq str 0 (length param)) param)
+    (string-right-trim " " (subseq str (+ (length param) 1)))))
      
 ;;(require "asdf")
 ;;(asdf:load-system :uiop)
@@ -49,9 +42,6 @@
 and it contains proper information about your connection\
 or setup it using (make-config :address 'youraddress' :port (by default is '8080') :username 'name' :password 'password')")))
 
-(defun make-config (&key address (port "8080") username password)
-     (setf *connection* (make-instance 'connection :address address :port port :username username :password password)))
-
 (defmacro with-drakma-http-request (address method-type &key content-type content parameters)
   `(drakma:http-request ,(concatenate 'string "http://" (address *connection*) ":" (port *connection*) "/exist/rest/db/" address)
                          :method ,method-type
@@ -60,29 +50,7 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
                          :content ,content
                          :parameters ',parameters))
 
-(defmacro get-document (address)
-  `(with-drakma-http-request ,address :get))
-;;(get-document "shakespeare/hamlet.xml")
-;;is equal to
-;;(drakma:http-request "http://localhost:8080/exist/rest/db/shakespeare/hamlet.xml"
-;;                         :method :get
-;;                         :content-type "application/xml"
-;;                         :basic-authorization '("admin" "admin"))
-                   
-;;if path to file is specified in :content -- binary contents of the file are sent (so I need to create some wrapper-func which will read file, mb
-;;check it for validity and then send as string (mb not the bes idea for large files -- should think about something more fast
-
-(defmacro load-document (address content-type content)
-  `(with-drakma-http-request ,address :put :content-type ,content-type :content ,content))
-
-;;(load "mycol2/mdoc.xml" "application/xml" "<test>test</test>")
-;;is equal to
-;;(drakma:http-request "http://localhost:8080/exist/rest/db/mycol2/mdoc.xml"
-;;                         :method :put
-;;                         :content-type "application/octet-stream" :content "<test>test</test>"
-;;                         :basic-authorization '("admin" "admin"))
-
-                         
+   
 (defun make-request-parameters (&key query indent encoding howmany start wrap source cache session release)
 			 (let ((params))
 			    (when query (push (cons "_query" query) params))
@@ -97,6 +65,67 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 			    (when release (push (cons "_release" release) params))
 			    params))
 
+(defun file-to-string (path)
+  (with-output-to-string (out)
+    (let ((in (open path :if-does-not-exist nil)))
+      (when in
+        (loop for line = (read-line in nil)
+           while line do (write-line line out))
+        (close in)))
+    out))
+
+(defun divide-path (path)
+    (if (position #\/ path)
+	(values (subseq path 0 (1+ (position #\/ path :from-end t))) (subseq path (1+ (position #\/ path :from-end t))))
+	(values "" path)))
+
+;;INTERFACE FUNCTIONS
+(defun read-db-config ()
+  (with-open-file (stream "db.config")
+  (let ((address (prepare-parameter "address" (read-line stream)))
+        (port (prepare-parameter "port" (read-line stream)))
+        (username (prepare-parameter "username" (read-line stream)))
+        (password (prepare-parameter "password" (read-line stream))))
+     (setf *connection* (make-instance 'connection :address address :port port :username username :password password)))))
+;;(read-db-config)
+
+(defun make-config (&key address (port "8080") username password)
+     (setf *connection* (make-instance 'connection :address address :port port :username username :password password)))
+;;(make-config :address 'localhost' :port (by default is '8080') :username 'admin' :password 'admin')
+
+(defmacro get-document (address)
+  `(with-drakma-http-request ,address :get))
+;;(get-document "shakespeare/hamlet.xml")
+;;is equal to
+;;(drakma:http-request "http://localhost:8080/exist/rest/db/shakespeare/hamlet.xml"
+;;                         :method :get
+;;                         :content-type "application/xml"
+;;                         :basic-authorization '("admin" "admin"))
+                   
+;;if path to file is specified in :content -- binary contents of the file are sent (so I need to create some wrapper-func which will read file, mb
+;;check it for validity and then send as string (mb not the bes idea for large files -- should think about something more fast
+
+(defmacro put-xml-document (address content)
+  `(with-drakma-http-request ,address :put :content-type "text/xml" :content ,(file-to-string content)))
+
+;;(put-xml-document "kkka/mydoc.xml" "/home/the-barm/workspace/existcl/mdoc.xml")
+
+(defmacro put-document (address content)
+  `(with-drakma-http-request ,address :put :content-type "text/plain" :content ,(file-to-string content)))
+
+;;(put-document "kkka/mydoc.xml" "/home/the-barm/workspace/existcl/mdoc.xml")
+
+(defmacro put-document-from-string (address content-type content)
+  `(with-drakma-http-request ,address :put :content-type ,content-type :content ,content))
+
+;;(put-document-from-string "mycol2/mdoc.xml" "text/plain" "<test>test</test>")
+;;(put-document-from-string "mycol2/mdoc.xml" "application/octet-stream" "<test>test</test>")
+;;is equal to
+;;(drakma:http-request "http://localhost:8080/exist/rest/db/mycol2/mdoc.xml"
+;;                         :method :put
+;;                         :content-type "application/octet-stream" :content "<test>test</test>"
+;;                         :basic-authorization '("admin" "admin"))
+
 (defmacro create-collection (name address)
   `(with-drakma-http-request ,address :get :parameters 
 			    ,(make-request-parameters :query 
@@ -108,27 +137,24 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 ;;                         :method :get
 ;;                         :basic-authorization '("admin" "admin")
 ;;                         :parameters '(("_query" . "xmldb:create-collection('mycol2', 'testcol')")))
-                         
+
 (defmacro delete-from-db (address)
   `(with-drakma-http-request ,address :delete))
+
+;;(delete-from-db "mycol2/rararar")
 
 ;; "Bad request"
 (defmacro get-permissions (address)
   `(with-drakma-http-request ,address :get :parameters 
 			    ,(make-request-parameters :query 
 						      (concatenate 'string "xmldb:get-permissions('" address "')"))))
-
 						      
-(defun divide-path (path)
-    (if (position #\/ path)
-	(values (subseq path 0 (1+ (position #\/ path :from-end t))) (subseq path (1+ (position #\/ path :from-end t))))
-	(values "" path)))
-	
-	
 (defmacro move-collection (source direction)
   `(with-drakma-http-request ,source :get :parameters 
 			    ,(make-request-parameters :query 
 						      (concatenate 'string "xmldb:move('/db/" source "', '/db/" direction "')"))))
+
+;;(move-collection "kkka/123" "mycol2")
 						      
 (defmacro move-document (source direction)
   (let ((src (gensym))
@@ -138,11 +164,15 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 				`(with-drakma-http-request ,source :get :parameters 
 				    ,(make-request-parameters :query 
 					  (concatenate 'string "xmldb:move('/db/" src "', '/db/" direction "', '" document "')"))))))
+
+;;(move-document "kkka/kkk.xml" "mycol2")
 					  
 (defmacro copy-collection (source direction)
   `(with-drakma-http-request ,source :get :parameters 
 			    ,(make-request-parameters :query 
 						      (concatenate 'string "xmldb:copy('/db/" source "', '/db/" direction "')"))))
+
+;;(copy-collection "kkka/123" "mycol2")
 						      
 (defmacro copy-document (source direction)
   (let ((src (gensym))
@@ -152,24 +182,48 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 				`(with-drakma-http-request ,source :get :parameters 
 				    ,(make-request-parameters :query 
 					  (concatenate 'string "xmldb:copy('/db/" src "', '/db/" direction "', '" document "')"))))))
+
+;;(copy-document "kkka/kkk.xml" "mycol2")
+
+					  
+(defmacro rename-collection (path new-name)
+  `(with-drakma-http-request ,path :get :parameters 
+			    ,(make-request-parameters :query 
+						      (concatenate 'string "xmldb:rename('/db/" path "', '" new-name "')"))))
+;;(rename-collection "adasd" "kkka")
+						      
+(defmacro rename-document (path new-name)
+  (let ((src (gensym))
+        (document (gensym)))
+	      (multiple-value-bind (src document)
+			    (divide-path path)
+				`(with-drakma-http-request ,path :get :parameters 
+				    ,(make-request-parameters :query 
+					  (concatenate 'string "xmldb:rename('/db/" src "', '" document "', '" new-name "')"))))))
+;;(rename-document "adasd/mdo.xml" "kkka.xml")
 					  
 (defmacro execute-query (query)
   `(with-drakma-http-request ,source :get :parameters 
 			    ,(make-request-parameters :query query)))
-						      
 
 
+;; tests
+
+;; (drakma:http-request "http://localhost:8080/exist/rest/db"
+;;                          :method :get
+;;                          :basic-authorization '("admin" "admin")
+;;                          :parameters '(("_query" . "xmldb:rename('/db/rararar', 'adasd')")))
 						      
 						      
 						      
-;; want-stream -- makes request return a stream (xml file) which can be proceeded using my own parser or one of the existing
-(read-line (drakma:http-request "http://localhost:8080/exist/rest/db"
-                         :method :get
-                         :basic-authorization '("admin" "admin")
-                         :parameters '(("_query" . "xmldb:collection-available('/db/mycol2')"))
-                         :want-stream t))
-;; ^
-(drakma:http-request "http://localhost:8080/exist/rest/db"
-                         :method :get
-                         :basic-authorization '("admin" "admin")
-                         :parameters '(("_query" . "xmldb:get-permissions('/db/mycol2/testcol22')")))
+;; ;; want-stream -- makes request return a stream (xml file) which can be proceeded using my own parser or one of the existing
+;; (read-line (drakma:http-request "http://localhost:8080/exist/rest/db"
+;;                          :method :get
+;;                          :basic-authorization '("admin" "admin")
+;;                          :parameters '(("_query" . "xmldb:collection-available('/db/mycol2')"))
+;;                          :want-stream t))
+;; ;; ^
+;; (drakma:http-request "http://localhost:8080/exist/rest/db"
+;;                          :method :get
+;;                          :basic-authorization '("admin" "admin")
+;;                          :parameters '(("_query" . "xmldb:get-permissions('/db/mycol2/testcol22')")))
