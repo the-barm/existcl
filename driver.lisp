@@ -38,17 +38,21 @@
 (defun check-connection ()
      (if *connection*
 	    *connection*
-	    (format t "Cannot find active connection. Ensure that you have file db.config \
+	    (error "Cannot find active connection. Ensure that you have file db.config \
 and it contains proper information about your connection\
-or setup it using (make-config :address 'youraddress' :port (by default is '8080') :username 'name' :password 'password')")))
+or setup it using (make-config :address \"youraddress\" :port (by default is \"8080\") :username \"name\" :password \"password\")")))
 
 (defmacro with-drakma-http-request (address method-type &key content-type content parameters)
-  `(drakma:http-request ,(concatenate 'string "http://" (address *connection*) ":" (port *connection*) "/exist/rest/db/" address)
-                         :method ,method-type
-                         :content-type ,content-type
-                         :basic-authorization '(,(username *connection*) ,(password *connection*))
-                         :content ,content
-                         :parameters ',parameters))
+  (let ((connection (check-connection)))
+    `(let ((result (multiple-value-list (drakma:http-request ,(concatenate 'string "http://" (address connection) ":" (port connection) "/exist/rest/db/" address)
+                                                             :method ,method-type
+                                                             :content-type ,content-type
+                                                             :basic-authorization '(,(username connection) ,(password connection))
+                                                             :content ,content
+                                                             :parameters ',parameters))))
+       (if (eq (second result) 200)
+           (first result)
+           (seventh result)))))
 
    
 (defun make-request-parameters (&key query indent encoding howmany start wrap source cache session release)
@@ -91,7 +95,7 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 
 (defun make-config (&key address (port "8080") username password)
      (setf *connection* (make-instance 'connection :address address :port port :username username :password password)))
-;;(make-config :address 'localhost' :port (by default is '8080') :username 'admin' :password 'admin')
+;;(make-config :address "localhost" :port "8080" :username "admin" :password "admin")
 
 (defmacro get-document (address)
   `(with-drakma-http-request ,address :get))
@@ -102,9 +106,6 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 ;;                         :content-type "application/xml"
 ;;                         :basic-authorization '("admin" "admin"))
                    
-;;if path to file is specified in :content -- binary contents of the file are sent (so I need to create some wrapper-func which will read file, mb
-;;check it for validity and then send as string (mb not the bes idea for large files -- should think about something more fast
-
 (defmacro put-xml-document (address content)
   `(with-drakma-http-request ,address :put :content-type "text/xml" :content ,(file-to-string content)))
 
@@ -202,7 +203,7 @@ or setup it using (make-config :address 'youraddress' :port (by default is '8080
 					  (concatenate 'string "xmldb:rename('/db/" src "', '" document "', '" new-name "')"))))))
 ;;(rename-document "adasd/mdo.xml" "kkka.xml")
 					  
-(defmacro execute-query (query)
+(defmacro execute-query (source query)
   `(with-drakma-http-request ,source :get :parameters 
 			    ,(make-request-parameters :query query)))
 
