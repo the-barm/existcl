@@ -8,6 +8,7 @@
 ;; above are strings which ql:add-to-init-file adds to ~/.sbclrc
 
 (ql:quickload :drakma)
+;;(ql:quickload :xmls)
 
 
 (defclass connection ()
@@ -42,19 +43,26 @@
 and it contains proper information about your connection\
 or setup it using (make-config :address \"youraddress\" :port (by default is \"8080\") :username \"name\" :password \"password\")")))
 
-(defmacro with-drakma-http-request (address method-type &key content-type content parameters)
-  (let ((connection (check-connection)))
-    `(let ((result (multiple-value-list (drakma:http-request ,(concatenate 'string "http://" (address connection) ":" (port connection) "/exist/rest/db/" address)
-                                                             :method ,method-type
-                                                             :content-type ,content-type
-                                                             :basic-authorization '(,(username connection) ,(password connection))
-                                                             :content ,content
-                                                             :parameters ',parameters))))
+(defmacro with-drakma-http-request (addr method-type &key content-type content parameters)
+  (with-gensyms (connection addr-t method-type-t content-type-t content-t params-t)
+    `(let* ((,connection ,(check-connection))
+            (,addr-t ,addr)
+            (,method-type-t ,method-type)
+            (,content-type-t ,content-type)
+            (,content-t ,content)
+            (,params-t ,parameters)
+            (result (multiple-value-list (drakma:http-request
+                                          (concatenate 'string "http://" (address ,connection) ":" (port ,connection) "/exist/rest/db/" ,addr-t)
+                                          :method ,method-type-t
+                                          :content-type ,content-type-t
+                                          :basic-authorization (list (username ,connection) (password ,connection))
+                                          :content ,content-t
+                                          :parameters ,params-t))))
+       (declare (ignorable ,method-type-t ,content-type-t ,content-t ,params-t))
        (if (eq (second result) 200)
            (first result)
            (seventh result)))))
 
-   
 (defun make-request-parameters (&key query indent encoding howmany start wrap source cache session release)
 			 (let ((params))
 			    (when query (push (cons "_query" query) params))
@@ -79,9 +87,9 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
     out))
 
 (defun divide-path (path)
-    (if (position #\/ path)
-	(values (subseq path 0 (1+ (position #\/ path :from-end t))) (subseq path (1+ (position #\/ path :from-end t))))
-	(values "" path)))
+  (if (position #\/ path)
+      (values (subseq path 0 (1+ (position #\/ path :from-end t))) (subseq path (1+ (position #\/ path :from-end t))))
+      (values "" path)))
 
 ;;INTERFACE FUNCTIONS
 (defun read-db-config ()
@@ -158,13 +166,11 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 ;;(move-collection "kkka/123" "mycol2")
 						      
 (defmacro move-document (source direction)
-  (let ((src (gensym))
-        (document (gensym)))
-	      (multiple-value-bind (src document)
-			    (divide-path source)
-				`(with-drakma-http-request ,source :get :parameters 
-				    ,(make-request-parameters :query 
-					  (concatenate 'string "xmldb:move('/db/" src "', '/db/" direction "', '" document "')"))))))
+  (multiple-value-bind (src document)
+      (divide-path source)
+    `(with-drakma-http-request ,source :get :parameters 
+                               (make-request-parameters :query 
+                                                         (concatenate 'string "xmldb:move('/db/" ,src "', '/db/" ,direction "', '" ,document "')")))))
 
 ;;(move-document "kkka/kkk.xml" "mycol2")
 					  
@@ -176,13 +182,11 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 ;;(copy-collection "kkka/123" "mycol2")
 						      
 (defmacro copy-document (source direction)
-  (let ((src (gensym))
-        (document (gensym)))
-	      (multiple-value-bind (src document)
-			    (divide-path source)
-				`(with-drakma-http-request ,source :get :parameters 
-				    ,(make-request-parameters :query 
-					  (concatenate 'string "xmldb:copy('/db/" src "', '/db/" direction "', '" document "')"))))))
+  (multiple-value-bind (src document)
+      (divide-path source)
+    `(with-drakma-http-request ,source :get :parameters 
+                               (make-request-parameters :query 
+                                                         (concatenate 'string "xmldb:copy('/db/" ,src "', '/db/" ,direction "', '" ,document "')")))))
 
 ;;(copy-document "kkka/kkk.xml" "mycol2")
 
@@ -194,13 +198,11 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 ;;(rename-collection "adasd" "kkka")
 						      
 (defmacro rename-document (path new-name)
-  (let ((src (gensym))
-        (document (gensym)))
-	      (multiple-value-bind (src document)
-			    (divide-path path)
-				`(with-drakma-http-request ,path :get :parameters 
-				    ,(make-request-parameters :query 
-					  (concatenate 'string "xmldb:rename('/db/" src "', '" document "', '" new-name "')"))))))
+  (multiple-value-bind (src document)
+      (divide-path path)
+    `(with-drakma-http-request ,path :get :parameters 
+                               (make-request-parameters :query 
+                                                         (concatenate 'string "xmldb:rename('/db/" ,src "', '" ,document "', '" ,new-name "')")))))
 ;;(rename-document "adasd/mdo.xml" "kkka.xml")
 					  
 (defmacro execute-query (source query)
