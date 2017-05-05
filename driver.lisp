@@ -28,6 +28,11 @@
 
 (defparameter *connection* nil)
 
+(defmacro with-gensyms (syms &body body)
+  `(let ,(mapcar #'(lambda (s) `(,s (gensym)))
+                 syms)
+     ,@body))
+
 (defun prepare-parameter (param str)
   (when (equal (subseq str 0 (length param)) param)
     (string-right-trim " " (subseq str (+ (length param) 1)))))
@@ -135,10 +140,10 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 ;;                         :content-type "application/octet-stream" :content "<test>test</test>"
 ;;                         :basic-authorization '("admin" "admin"))
 
-(defmacro create-collection (name address)
+(defmacro create-collection (address name)
   `(with-drakma-http-request ,address :get :parameters 
-			    ,(make-request-parameters :query 
-						      (concatenate 'string "xmldb:create-collection('" address "', '" name "')"))))
+			    (make-request-parameters :query 
+						      (concatenate 'string "xmldb:create-collection('" ,address "', '" ,name "')"))))
 
 ;;(create-collection "mycol2" "testcol")
 ;;is equal to 
@@ -155,13 +160,15 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 ;; "Bad request"
 (defmacro get-permissions (address)
   `(with-drakma-http-request ,address :get :parameters 
-			    ,(make-request-parameters :query 
-						      (concatenate 'string "xmldb:get-permissions('" address "')"))))
+                             (make-request-parameters :query 
+                                                      (concatenate 'string "xmldb:get-permissions('" ,address "')"))))
+
+;;TODO: (collection-available)
 						      
 (defmacro move-collection (source direction)
   `(with-drakma-http-request ,source :get :parameters 
-			    ,(make-request-parameters :query 
-						      (concatenate 'string "xmldb:move('/db/" source "', '/db/" direction "')"))))
+                             (make-request-parameters :query 
+                                                      (concatenate 'string "xmldb:move('/db/" ,source "', '/db/" ,direction "')"))))
 
 ;;(move-collection "kkka/123" "mycol2")
 						      
@@ -177,8 +184,8 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 					  
 (defmacro copy-collection (source direction)
   `(with-drakma-http-request ,source :get :parameters 
-			    ,(make-request-parameters :query 
-						      (concatenate 'string "xmldb:copy('/db/" source "', '/db/" direction "')"))))
+                             (make-request-parameters :query 
+                                                      (concatenate 'string "xmldb:copy('/db/" ,source "', '/db/" ,direction "')"))))
 
 ;;(copy-collection "kkka/123" "mycol2")
 						      
@@ -195,8 +202,8 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 					  
 (defmacro rename-collection (path new-name)
   `(with-drakma-http-request ,path :get :parameters 
-			    ,(make-request-parameters :query 
-						      (concatenate 'string "xmldb:rename('/db/" path "', '" new-name "')"))))
+                             (make-request-parameters :query 
+                                                      (concatenate 'string "xmldb:rename('/db/" ,path "', '" ,new-name "')"))))
 ;;(rename-collection "adasd" "kkka")
 						      
 (defmacro rename-document (path new-name)
@@ -210,7 +217,7 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 					  
 (defmacro execute-query (source query)
   `(with-drakma-http-request ,source :get :parameters 
-			    ,(make-request-parameters :query query)))
+                             (make-request-parameters :query ,query)))
 
 
 ;; tests
