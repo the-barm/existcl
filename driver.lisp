@@ -215,17 +215,64 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 
 
 ;; tests
+(defun ignore-warning (condition)
+   (declare (ignore condition))
+   (muffle-warning))
 
 (defun test-interface-functions (tests)
-  (loop for test in tests
-     if (equal (eval (first test)) (second test))
-     do (format t "~A *PASSED*~%" (caar test))
-     else do (format t "~A #FAILED#~%" (caar test))))
+  (handler-bind ((warning #'ignore-warning))
+    (loop for test in tests
+       if (equalp (eval (first test)) (second test))
+       do (format t "~A *done*~%" (caar test))
+       else do (format t "~A #failed#~%" (caar test)))))
 
 
 (make-config :address "localhost" :port "8080" :username "admin" :password "admin")
-(test-interface-functions '(((create-collection "mycol2" "testcol") t)
-                            ((delete-from-db "mycol2/testcol") t)))
+
+
+(test-interface-functions '(((create-collection "" "testcol") t)
+                            ((create-collection "" "testcol2") t)
+                            ((put-document-from-string "testcol/testtest.xml" "text/plain" "<test>test</test>") t)
+                            ((get-document "testcol/testtest.xml") "<test>test</test>")
+                            ((put-document-from-string "testcol/testtest2.xml" "application/octet-stream" "<test>test</test>") t)
+                            ((get-document "testcol/testtest2.xml") #(60 116 101 115 116 62 116 101 115 116 60 47 116 101 115 116 62))
+                            ((put-xml-document "testcol/mydoc.xml" "/home/the-barm/workspace/existcl/mdoc.xml") t)
+                            ((get-document "testcol/mydoc.xml")
+                             "<note>
+    <to>Tove</to>
+    <from>Jani</from>
+    <heading>Reminder</heading>
+    <body>Don't forget me this weekend!</body>
+</note>")
+                            ((put-document "testcol/mydoc2.xml" "/home/the-barm/workspace/existcl/mdoc.xml") t)
+                            ((get-document "testcol/mydoc2.xml")
+                             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<note>
+   <to>Tove</to>
+   <from>Jani</from>
+   <heading>Reminder</heading>
+   <body>Don't forget me this weekend!</body>
+</note>
+")
+                            ((move-document "testcol/testtest.xml" "testcol2") t)
+                            ((copy-document "testcol/mydoc2.xml" "testcol2") t)
+                            ((rename-document "testcol/mydoc2.xml" "kkka.xml") t)
+                            ((copy-collection "testcol2" "testcol") t)
+                            ((rename-collection "testcol2" "123") t)
+                            ((move-collection "123" "testcol") t)
+                            ((delete-from-db "testcol") t)))
+
+(test-interface-functions '(((create-collection "wrongwrong" "testcol") nil)
+                            ((get-document "wrongwrong.xml") nil)
+                            ((move-document "wrongwrong.xml" "wrongwrong") nil)
+                            ((copy-document "wrongwrong.xml" "wrongwrong") nil)
+                            ((rename-document "wrongwrong.xml" "wrongwrong2.xml") nil)
+                            ((copy-collection "wrongwrong" "wrongwrong2") nil)
+                            ((rename-collection "wrongwrong" "123") nil)
+                            ((move-collection "123" "testcol") nil)
+                            ((delete-from-db "wrongwrong") nil)))
+
+
 
 ;; (drakma:http-request "http://localhost:8080/exist/rest/db"
 ;;                          :method :get
