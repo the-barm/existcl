@@ -151,7 +151,7 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 ;;                         :basic-authorization '("admin" "admin"))
 
 (defmacro create-collection (address name)
-  `(execute-query ,address ,`(concatenate 'string "xmldb:create-collection('" ,address "', '" ,name "')")))
+  `(execute-query ,address ,`(concatenate 'string "xmldb:create-collection('/db/" ,address "', '" ,name "')")))
 
 ;;(create-collection "mycol2" "testcol")
 ;;is equal to 
@@ -215,6 +215,17 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 
 
 ;; tests
+
+(defun test-interface-functions (tests)
+  (loop for test in tests
+     if (equal (eval (first test)) (second test))
+     do (format t "~A *PASSED*~%" (caar test))
+     else do (format t "~A #FAILED#~%" (caar test))))
+
+
+(make-config :address "localhost" :port "8080" :username "admin" :password "admin")
+(test-interface-functions '(((create-collection "mycol2" "testcol") t)
+                            ((delete-from-db "mycol2/testcol") t)))
 
 ;; (drakma:http-request "http://localhost:8080/exist/rest/db"
 ;;                          :method :get
