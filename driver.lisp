@@ -8,7 +8,7 @@
 ;; above are strings which ql:add-to-init-file adds to ~/.sbclrc
 
 (ql:quickload :drakma)
-;;(ql:quickload :xmls)
+(ql:quickload :xmls)
 
 
 (defclass connection ()
@@ -28,6 +28,19 @@
 
 (defparameter *connection* nil)
 
+(defmacro aif (test-form then-form &optional else-form)
+  `(let ((it ,test-form))
+     (if it ,then-form ,else-form)))
+
+(defmacro awhen (test-form &body body)
+  `(aif ,test-form
+	(progn ,@body)))
+
+(defun translate-boolean (arg)
+  (cond ((string-equal arg "true") t)
+        ((string-equal arg "false") nil)
+        (t (error "The value of: ~A is not of boolean type" arg))))
+
 (defmacro with-gensyms (syms &body body)
   `(let ,(mapcar #'(lambda (s) `(,s (gensym)))
                  syms)
@@ -37,10 +50,6 @@
   (when (equal (subseq str 0 (length param)) param)
     (string-right-trim " " (subseq str (+ (length param) 1)))))
      
-;;(require "asdf")
-;;(asdf:load-system :uiop)
-;;(uiop:run-program "./exist/bin/client.sh -m /db/testcol77 -p /home/the-barm/exist/xml/shakespeare -P admin" :output *standard-output*)
-
 (defun check-connection ()
      (if *connection*
 	    *connection*
@@ -70,13 +79,22 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
            (if ,return-text-t
                (if (stringp  (first ,result))
                    (first ,result)
-                   (progn
-                     (warn "Output is not a string!")
-                     (first ,result)))
+                   (flexi-streams:octets-to-string (first ,result)))
                t)
            (progn
              (warn (seventh ,result))
              nil)))))
+
+(defun parse-resulting-xml (target &key can-be-null multiple)
+  (if (xmls:xmlrep-children (xmls:parse target))
+      (if multiple
+          (xmls:xmlrep-find-child-tags "value"
+                                      (xmls:parse target))
+          (xmls:xmlrep-find-child-tag "value"
+                                      (xmls:parse target)))
+      (if can-be-null
+          nil
+          (error "Requested address is not found"))))
 
 (defun make-request-parameters (&key query indent encoding howmany start wrap source cache session release)
 			 (let ((params))
@@ -164,12 +182,6 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
   `(with-drakma-http-request ,address :delete))
 
 ;;(delete-from-db "mycol2/rararar")
-
-;; "Bad request"
-(defmacro get-permissions (address)
-  `(execute-query ,address ,`(concatenate 'string "xmldb:get-permissions('" ,address "')")))
-
-;;TODO: (collection-available)
 						      
 (defmacro move-collection (source direction)
   `(execute-query ,source ,`(concatenate 'string "xmldb:move('/db/" ,source "', '/db/" ,direction "')")))
@@ -209,9 +221,9 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
        (execute-query ,path ,`(concatenate 'string "xmldb:rename('/db/" ,src "', '" ,document "', '" ,new-name "')")))))
 ;;(rename-document "adasd/mdo.xml" "kkka.xml")
 					  
-(defmacro execute-query (source query)
+(defmacro execute-query (source query &key return-text)
   `(with-drakma-http-request ,source :get :parameters 
-                             (make-request-parameters :query ,query)))
+                             (make-request-parameters :query ,query) :return-text ,return-text))
 
 
 ;; tests
@@ -235,7 +247,7 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
                             ((put-document-from-string "testcol/testtest.xml" "text/plain" "<test>test</test>") t)
                             ((get-document "testcol/testtest.xml") "<test>test</test>")
                             ((put-document-from-string "testcol/testtest2.xml" "application/octet-stream" "<test>test</test>") t)
-                            ((get-document "testcol/testtest2.xml") #(60 116 101 115 116 62 116 101 115 116 60 47 116 101 115 116 62))
+                            ((get-document "testcol/testtest2.xml") "<test>test</test>")
                             ((put-xml-document "testcol/mydoc.xml" "/home/the-barm/workspace/existcl/mdoc.xml") t)
                             ((get-document "testcol/mydoc.xml")
                              "<note>
@@ -271,24 +283,97 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
                             ((rename-collection "wrongwrong" "123") nil)
                             ((move-collection "123" "testcol") nil)
                             ((delete-from-db "wrongwrong") nil)))
+	      
+(defmacro get-permissions (address)
+  `(xmls:xmlrep-integer-child
+    (parse-resulting-xml
+     (execute-query ,address (concatenate 'string "xmldb:get-permissions('" ,address "')") :return-text t))))
+
+(defmacro collection-available (address)
+  `(translate-boolean
+    (xmls:xmlrep-string-child
+     (parse-resulting-xml
+      (execute-query ,address (concatenate 'string "xmldb:collection-available('" ,address "')") :return-text t)))))
+
+(defmacro collection-created (address)
+  `(xmls:xmlrep-string-child
+    (parse-resulting-xml
+     (execute-query ,address (concatenate 'string "xmldb:created('" ,address "')") :return-text t))))
+
+(defmacro document-created (address)
+  (with-gensyms (src document)
+    `(multiple-value-bind (,src ,document)
+         (divide-path ,address)
+       (xmls:xmlrep-string-child
+        (parse-resulting-xml
+         (execute-query ,address (concatenate 'string "xmldb:created('" ,src "', '" ,document "')") :return-text t))))))
+
+(defmacro document-has-lock (address)
+  (with-gensyms (src document)
+    `(multiple-value-bind (,src ,document)
+         (divide-path ,address)
+       (awhen (parse-resulting-xml
+               (execute-query ,address (concatenate 'string "xmldb:document-has-lock('" ,src "', '" ,document "')") :return-text t)
+               :can-be-null t)
+         (xmls:xmlrep-string-child it)))))
+
+(defmacro clear-lock (address)
+  (with-gensyms (src document)
+    `(multiple-value-bind (,src ,document)
+         (divide-path ,address)
+       (awhen (parse-resulting-xml
+               (execute-query ,address (concatenate 'string "xmldb:clear-lock('" ,src "', '" ,document "')") :return-text t)
+               :can-be-null t)
+         (xmls:xmlrep-string-child it)))))
+
+(defmacro get-child-collections (address)
+  `(mapcar #'xmls:xmlrep-string-child
+           (parse-resulting-xml
+            (execute-query ,address (concatenate 'string "xmldb:get-child-collections('" ,address "')") :return-text t)
+            :multiple t)))
+
+(defmacro get-child-resources (address)
+  `(mapcar #'xmls:xmlrep-string-child
+           (parse-resulting-xml
+            (execute-query ,address (concatenate 'string "xmldb:get-child-resources('" ,address "')") :return-text t)
+            :multiple t)))
+
+(defmacro last-modified (address)
+  (with-gensyms (src document)
+    `(multiple-value-bind (,src ,document)
+         (divide-path ,address)
+       (xmls:xmlrep-string-child
+        (parse-resulting-xml
+         (execute-query ,address (concatenate 'string "xmldb:last-modified('" ,src "', '" ,document "')") :return-text t))))))
+
+(defmacro size (address)
+  (with-gensyms (src document)
+    `(multiple-value-bind (,src ,document)
+         (divide-path ,address)
+       (xmls:xmlrep-integer-child
+        (parse-resulting-xml
+         (execute-query ,address (concatenate 'string "xmldb:size('" ,src "', '" ,document "')") :return-text t))))))
+
+(defmacro reindex (address)
+  `(translate-boolean
+    (xmls:xmlrep-string-child
+     (parse-resulting-xml
+      (execute-query ,address (concatenate 'string "xmldb:reindex('" ,address "')") :return-text t)))))
+
+(defmacro get-document-owner (address)
+  (with-gensyms (src document)
+    `(multiple-value-bind (,src ,document)
+         (divide-path ,address)
+       (xmls:xmlrep-string-child
+        (parse-resulting-xml
+         (execute-query ,address (concatenate 'string "xmldb:get-owner('" ,src "', '" ,document "')") :return-text t))))))
+
+(defmacro get-collection-owner (address)
+  `(xmls:xmlrep-string-child
+    (parse-resulting-xml
+     (execute-query ,address (concatenate 'string "xmldb:get-owner('" ,address "')") :return-text t))))
+
+;;TODO:  authenticate(?)
 
 
 
-;; (drakma:http-request "http://localhost:8080/exist/rest/db"
-;;                          :method :get
-;;                          :basic-authorization '("admin" "admin")
-;;                          :parameters '(("_query" . "xmldb:rename('/db/rararar', 'adasd')")))
-						      
-						      
-						      
-;; ;; want-stream -- makes request return a stream (xml file) which can be proceeded using my own parser or one of the existing
-;; (read-line (drakma:http-request "http://localhost:8080/exist/rest/db"
-;;                          :method :get
-;;                          :basic-authorization '("admin" "admin")
-;;                          :parameters '(("_query" . "xmldb:collection-available('/db/mycol2')"))
-;;                          :want-stream t))
-;; ;; ^
-;; (drakma:http-request "http://localhost:8080/exist/rest/db"
-;;                          :method :get
-;;                          :basic-authorization '("admin" "admin")
-;;                          :parameters '(("_query" . "xmldb:get-permissions('/db/mycol2/testcol22')")))
