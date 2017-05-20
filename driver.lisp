@@ -6,9 +6,7 @@
 ;;    (when (probe-file quicklisp-init)
 ;;      (load quicklisp-init)))
 ;; above are strings which ql:add-to-init-file adds to ~/.sbclrc
-
-(ql:quickload :drakma)
-(ql:quickload :xmls)
+(in-package #:existcl)
 
 
 (defclass connection ()
@@ -70,20 +68,23 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
             (,content-t ,content)
             (,params-t ,parameters)
             (,return-text-t ,return-text)
-            (,result (multiple-value-list (drakma:http-request
-                                           (concatenate 'string "http://" (address ,connection) ":" (port ,connection) "/exist/rest/db/" ,addr-t)
-                                           :method ,method-type-t
-                                           :content-type ,content-type-t
-                                           :basic-authorization (list (username ,connection) (password ,connection))
-                                           :content ,content-t
-                                           :parameters ,params-t))))
+            (,result (multiple-value-list
+                      (drakma:http-request
+                       (concatenate 'string
+                                    "http://" (address ,connection) ":" (port ,connection) "/exist/rest/db/" ,addr-t)
+                       :method ,method-type-t
+                       :content-type ,content-type-t
+                       :basic-authorization (list (username ,connection)
+                                                  (password ,connection))
+                       :content ,content-t
+                       :parameters ,params-t))))
        (declare (ignorable ,method-type-t ,content-type-t ,content-t ,params-t))
        (if (or (eq (second ,result) 200)
                (eq (second ,result) 201))
            (if ,return-text-t
                (if (stringp  (first ,result))
                    (first ,result)
-                   (flexi-streams:octets-to-string (first ,result)))
+                   (babel:octets-to-string (first ,result)))
                t)
            (progn
              (warn (seventh ,result))
@@ -127,7 +128,8 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 
 (defun divide-path (path)
   (if (position #\/ path)
-      (values (subseq path 0 (1+ (position #\/ path :from-end t))) (subseq path (1+ (position #\/ path :from-end t))))
+      (values (subseq path 0 (1+ (position #\/ path :from-end t)))
+              (subseq path (1+ (position #\/ path :from-end t))))
       (values "" path)))
 
 ;;INTERFACE FUNCTIONS
@@ -336,77 +338,3 @@ its size may be different, since parts of the structural information are stored 
   `(xmls:xmlrep-string-child
     (parse-resulting-xml
      (execute-query ,address (concatenate 'string "xmldb:get-owner('" ,address "')") :return-text t))))
-
-;; tests
-
-(defun test-interface-functions (tests)
-  "Small test-runner which accepts sequence of commands in format (((command) result) ...)"
-  (handler-bind ((warning #'ignore-warning))
-    (loop for test in tests
-       if (equalp (eval (first test)) (eval (second test)))
-       do (format t "~A *done*~%" (caar test))
-       else do (format t "~A #failed#~%" (caar test)))))
-
-
-(make-config :address "localhost" :port "8080" :username "admin" :password "admin")
-
-
-(test-interface-functions '(((create-collection "" "testcol") t)
-                            ((create-collection "" "testcol2") t)
-                            ((put-document-from-string "testcol/testtest.xml" "text/plain" "<test>test</test>") t)
-                            ((get-document "testcol/testtest.xml") "<test>test</test>")
-                            ((put-document-from-string "testcol/testtest2.xml" "application/octet-stream" "<test>test</test>") t)
-                            ((get-document "testcol/testtest2.xml") "<test>test</test>")
-                            ((put-xml-document "testcol/mydoc.xml" "/home/the-barm/workspace/existcl/mdoc.xml") t)
-                            ((get-document "testcol/mydoc.xml")
-                             "<note>
-    <to>Tove</to>
-    <from>Jani</from>
-    <heading>Reminder</heading>
-    <body>Don't forget me this weekend!</body>
-</note>")
-                            ((put-document "testcol/mydoc2.xml" "/home/the-barm/workspace/existcl/mdoc.xml") t)
-                            ((get-document "testcol/mydoc2.xml")
-                             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<note>
-   <to>Tove</to>
-   <from>Jani</from>
-   <heading>Reminder</heading>
-   <body>Don't forget me this weekend!</body>
-</note>
-")
-                            ((move-document "testcol/testtest.xml" "testcol2") t)
-                            ((copy-document "testcol/mydoc2.xml" "testcol2") t)
-                            ((rename-document "testcol/mydoc2.xml" "kkka.xml") t)
-                            ((copy-collection "testcol2" "testcol") t)
-                            ((rename-collection "testcol2" "123") t)
-                            ((move-collection "123" "testcol") t)
-                            ((delete-from-db "testcol") t)))
-
-(test-interface-functions '(((create-collection "wrongwrong" "testcol") nil)
-                            ((get-document "wrongwrong.xml") nil)
-                            ((move-document "wrongwrong.xml" "wrongwrong") nil)
-                            ((copy-document "wrongwrong.xml" "wrongwrong") nil)
-                            ((rename-document "wrongwrong.xml" "wrongwrong2.xml") nil)
-                            ((copy-collection "wrongwrong" "wrongwrong2") nil)
-                            ((rename-collection "wrongwrong" "123") nil)
-                            ((move-collection "123" "testcol") nil)
-                            ((delete-from-db "wrongwrong") nil)))
-
-(test-interface-functions '(((create-collection "" "testcol") t)
-                            ((create-collection "testcol" "testcol2") t)
-                            ((get-collection-permissions "testcol") 493)
-                            ((put-document-from-string "testcol/testtest.xml" "text/plain" "<test>test</test>") t)
-                            ((get-document-permissions "testcol/testtest.xml") 420)
-                            ((document-has-lock "testcol/testtest.xml") nil)
-                            ((clear-lock "testcol/testtest.xml") nil)
-                            ((collection-available "testcol") t)
-                            ((get-child-collections "testcol") '("testcol2"))
-                            ((get-child-resources "testcol") '("testtest.xml"))
-                            ((size "testcol/testtest.xml") 17)
-                            ((reindex "testcol") t)
-                            ((get-document-owner "testcol/testtest.xml") (username *connection*))
-                            ((get-collection-owner "testcol/testcol2") (username *connection*))
-                            ((delete-from-db "testcol") t)))
-
-
