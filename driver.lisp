@@ -135,7 +135,8 @@ or setup it using (make-config :address \"youraddress\" :port (by default is \"8
 ;;INTERFACE FUNCTIONS
 (defun read-db-config ()
   "Create new config instance with parameters specified by db.config file inside driver root directory"
-  (with-open-file (stream "db.config")
+  (with-open-file (stream "db.config"
+                          :if-does-not-exist :error)
   (let ((address (prepare-parameter "address" (read-line stream)))
         (port (prepare-parameter "port" (read-line stream)))
         (username (prepare-parameter "username" (read-line stream)))
