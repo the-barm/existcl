@@ -1,7 +1,9 @@
 (defpackage #:existcl
   (:documentation "eXist-db driver for Common Lisp.")
   (:use #:cl :asdf)
-  (:export #:read-db-config
+  (:export #:read-db-config-file
+	   #:update-db-config-file
+	   #:db-config-file-from-current-config
            #:make-config
            #:get-document
            #:put-xml-document
