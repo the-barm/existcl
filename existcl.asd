@@ -9,4 +9,5 @@
                #:babel)
   :components ((:file "package")
                (:file "driver")
+               (:file "interface")
                (:file "tests")))

@@ -1,8 +1,8 @@
-(in-package #:existcl)
-
 ;; To get tests running you have to create account with rights to create, modify and delete files in root
 ;; directory of your eXist-db. Your eXist server should also be up during testing process. You can provide
 ;; connection info using make-config or read-db-config functions 
+
+(in-package #:existcl)
 
 (defun test-interface-functions (test-name tests &optional finally)
   "Small test-runner which accepts sequence of commands in format '(((command) result) ...). Block finally 
@@ -25,8 +25,6 @@ is executed after all tests or if error condition is met during run."
      (test-interface-functions ,description ,funcs ,finally)))
 
 (defun db-config-file-test ()
-  (update-db-config-file)
-  (read-db-config-file)
   (db-config-file-from-current-config)
   (setq *connection* nil)
   (read-db-config-file)
